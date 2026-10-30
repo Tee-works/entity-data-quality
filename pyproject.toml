@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "entity-data-quality"
+version = "0.1.0"
+description = "SQL data quality controls on the GLEIF golden copy: legal entity identifiers and their corporate parents."
+requires-python = ">=3.11"
+dependencies = [
+    "duckdb>=1.3",
+    "pandas>=2.2",
+    "pyyaml>=6",
+    "jinja2>=3.1",
+    "requests>=2.31",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6", "sqlfluff>=3"]
+
+[project.scripts]
+edq = "edq.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.sqlfluff.core]
+dialect = "duckdb"
+templater = "raw"
+max_line_length = 120
+exclude_rules = ["AM04", "ST06", "RF04"]

@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entity Data Quality</title>
+<meta name="description" content="Eleven SQL data quality controls on the GLEIF golden copy: {{ case.entities|n }} legal entity identifiers and their corporate parents.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400&family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet">
+<style>
+:root { --bg: #fbfaf7; --surface: #ffffff; --ink: #1c1c1a; --ink-2: #44443f; --ink-3: #74746c; --line: #e4e2da; --flag: #b03a2e; --flag-soft: #f6e4e1; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #161615; --surface: #1e1e1c; --ink: #ecebe6; --ink-2: #c9c8c0; --ink-3: #97968e; --line: #34332f; --flag: #e07a6e; --flag-soft: #3a2421; } }
+:root[data-theme="dark"] { --bg: #161615; --surface: #1e1e1c; --ink: #ecebe6; --ink-2: #c9c8c0; --ink-3: #97968e; --line: #34332f; --flag: #e07a6e; --flag-soft: #3a2421; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: "IBM Plex Sans", system-ui, sans-serif; }
+.note { max-width: 760px; margin: 0 auto; padding: 0 16px; }
+header { border-bottom: 1px solid var(--line); background: var(--surface); }
+header .note { padding: 22px 16px 26px; }
+.topline { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 13px; color: var(--ink-3); }
+.topline a { color: var(--ink-2); }
+h1 { font-family: "Source Serif 4", Georgia, serif; font-weight: 600; font-size: clamp(26px, 3.6vw, 36px); line-height: 1.18; margin: 26px 0 10px; }
+.byline { color: var(--ink-3); font-size: 14px; margin: 0; }
+.byline a { color: var(--ink-2); }
+article { padding: 30px 16px 60px; font-family: "Source Serif 4", Georgia, serif; font-size: 18px; line-height: 1.6; }
+article p { margin: 0 0 16px; }
+article .summary { font-size: 19px; }
+article h2 { font-family: "IBM Plex Sans", system-ui, sans-serif; font-size: 18px; font-weight: 600; margin: 36px 0 10px; }
+article a { color: var(--ink); text-decoration-color: var(--ink-3); }
+.scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 6px 0 8px; }
+table { border-collapse: collapse; width: 100%; font-family: "IBM Plex Sans", system-ui, sans-serif; font-size: 14px; }
+th { font-size: 12px; font-weight: 600; color: var(--ink-3); text-align: left; padding: 6px 10px 6px 0; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 7px 10px 7px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+td .sub { display: block; color: var(--ink-3); font-size: 12.5px; }
+.flag { color: var(--flag); font-weight: 600; }
+.caption { font-family: "IBM Plex Sans", system-ui, sans-serif; font-size: 13.5px; line-height: 1.5; color: var(--ink-3); margin: 2px 0 18px; }
+code, pre { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12.5px; }
+pre { background: var(--surface); border: 1px solid var(--line); padding: 12px; overflow-x: auto; line-height: 1.45; }
+details summary { font-family: "IBM Plex Sans", system-ui, sans-serif; font-size: 14px; color: var(--ink-2); cursor: pointer; }
+.signoff { color: var(--ink-2); font-size: 16px; border-top: 1px solid var(--line); padding-top: 16px; margin-top: 30px; }
+@media (max-width: 600px) { article { font-size: 17px; } table.wide { min-width: 620px; } }
+</style>
+</head>
+<body>
+<header><div class="note">
+  <div class="topline"><span>Independent data quality note</span><span>GLEIF golden copy, {{ publish_date }}</span></div>
+  <h1>Who owns whom: where the global register of legal entities contradicts itself</h1>
+  <p class="byline">Iyanujesu Taiwo Akinyefa &middot; <a href="https://github.com/Tee-works/entity-data-quality">code and controls</a></p>
+</div></header>
+
+{% set e06 = by_id["E06"] %}{% set e05 = by_id["E05"] %}
+<article class="note">
+  <p class="summary">The Global LEI Index lists {{ case.entities|n }} legal entities and {{ case.relationships|n }} links between them, and it is where banks, regulators and data vendors look up who a company belongs to. I ran {{ results|length }} SQL data quality controls over the full golden copy of {{ publish_date }}. The identifiers themselves are clean. The ownership links are where it breaks: in {{ e06.exceptions|n }} cases a subsidiary names an ultimate parent that the top of its own reported chain contradicts; in the largest cases, because one record was not updated after an acquisition. {{ case.e06.issued_children|n }} of those involve a top entity whose record is current, not lapsed.</p>
+
+  <h2>1. When a group's own records disagree</h2>
+  <p>Each entity reports two parents: its direct parent and its ultimate parent. Following the direct parents upwards should end at the ultimate parent. Control E06 follows every chain to its top and compares. It flags a subsidiary when the entity at the top says something incompatible about itself: that it has no parent at all, or that its ultimate parent is someone else. Tops that have a parent without an LEI, or keep it private, are consistent and pass.</p>
+  <div class="scroll"><table class="wide">
+    <thead><tr><th>Subsidiaries say their ultimate parent is</th><th>Their chain ends at</th><th>Which reports</th><th class="num">Subsidiaries</th></tr></thead>
+    <tbody>
+    {% for g in case.e06.rows %}
+      <tr><td>{{ g.ultimate.name }}<span class="sub">{{ g.ultimate.jurisdiction }}</span></td>
+          <td>{{ g.top.name }}<span class="sub">{{ g.top_lei }}, {{ g.top_status|lower }}{% if g.top.updated %}, updated {{ g.top.updated }}{% endif %}</span></td>
+          <td class="flag">{{ g.top_says }}</td><td class="num">{{ g.children }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  <p class="caption">The largest groups by number of subsidiaries affected. "No known person" and "natural persons" mean the entity reports that no company controls it; "non consolidating" means no parent consolidates it.</p>
+  <p>In the largest cases the pattern is an acquisition the top record never caught up with. RSA Insurance Group was bought by Intact Financial in 2021, and its subsidiaries name Intact as their ultimate parent, but RSA's own record, last updated {{ case.e06.rows|selectattr("top_lei", "equalto", "549300HOGQ7E0TY86138")|map(attribute="top.updated")|first|default("recently") }}, still reports no known parent. Some tops are lapsed records nobody maintains; {{ case.e06.tops_issued|n }} are current registrations, renewed and re-validated, that still contradict the companies beneath them.</p>
+
+  <h2>2. Ultimate parents that are not at the top</h2>
+  <p>Control E05 asks a simpler question of the same data: does the named ultimate parent report a parent of its own? {{ e05.exceptions|n }} subsidiaries name an ultimate parent that does.</p>
+  <div class="scroll"><table class="wide">
+    <thead><tr><th>Named as ultimate parent</th><th>But reports its own parent</th><th class="num">Subsidiaries</th></tr></thead>
+    <tbody>
+    {% for g in case.e05 %}
+      <tr><td>{{ g.named.name }}<span class="sub">{{ g.named.jurisdiction }}</span></td><td>{{ g.its_parent.name }}<span class="sub">{{ g.its_parent.jurisdiction }}</span></td><td class="num">{{ g.children }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  <p class="caption">JLT Group's own record names Marsh &amp; McLennan as its parent, and NIBC Bank's names ABN AMRO, yet their subsidiaries still stop one level short.</p>
+
+  <h2>3. Smaller structural faults</h2>
+  <p>These are rare, which is what a well-run register should look like, but each one breaks any program that walks the hierarchy.</p>
+  <div class="scroll"><table class="wide">
+    <thead><tr><th>Control</th><th>Entity</th><th>Finding</th></tr></thead>
+    <tbody>
+    {% for r in case.loops %}<tr><td>E04 loop</td><td>{{ r.entity.name }}<span class="sub">{{ r.lei }}</span></td><td>{{ r.detail }}</td></tr>{% endfor %}
+    {% for r in case.self %}<tr><td>E03 own parent</td><td>{{ r.entity.name }}<span class="sub">{{ r.lei }}</span></td><td>{{ r.detail }}</td></tr>{% endfor %}
+    {% for r in case.dupes[:8] %}<tr><td>E09 duplicate</td><td>{{ r.entity.name }}<span class="sub">{{ r.lei }} and {{ r.related }}</span></td><td>{{ r.detail }}</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+  <p class="caption">Two pairs of companies each name the other as direct parent. {{ by_id["E09"].exceptions|n }} issued LEIs share a registry, registry ID and legal name with another issued LEI; the first eight pairs are shown.</p>
+
+  <h2>4. All eleven controls</h2>
+  <p>Each control is one SQL file with an owner, a severity, the impact of a failure and a triage runbook in its header, and returns one row per item checked.</p>
+  <div class="scroll"><table class="wide">
+    <thead><tr><th>Control</th><th>Severity</th><th class="num">Checked</th><th class="num">Exceptions</th><th class="num">Rate</th></tr></thead>
+    <tbody>
+    {% for r in results %}
+      <tr><td>{{ r.control.id }} {{ r.control.name }}<span class="sub">{{ r.control.dimension }} &middot; {{ r.control.owner }}</span></td><td>{{ r.control.severity }}</td><td class="num">{{ r.checked|n }}</td><td class="num">{{ r.exceptions|n }}</td><td class="num">{{ "%.3f"|format(r.rate * 100) }}%</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  <p>E01 checks every identifier's ISO 17442 check digits. The {{ by_id["E01"].exceptions|n }} failures are all records already annulled or marked duplicate, so the register has caught its own typing errors. E11 is the large number: {{ "%.0f"|format(by_id["E11"].rate * 100) }}% of LEIs have lapsed, meaning their data has not been re-validated since the renewal date. That is well known and mostly harmless for dormant entities, but it matters for counterparties still being traded with.</p>
+  <details><summary>The SQL for E06</summary><pre><code>{{ case.e06_sql|safe }}</code></pre></details>
+
+  <h2>5. Method and caveats</h2>
+  <p>The data is GLEIF's public golden copy (<a href="https://www.gleif.org/en/lei-data/gleif-golden-copy">gleif.org</a>): the LEI records, the relationship records and the reporting exceptions, streamed into Parquet and queried with DuckDB. Only active accounting-consolidation relationships between LEIs are used for the hierarchy controls. A finding means two records disagree, not which one is wrong; deciding that needs the companies' own filings, and is the job of the LOUs that manage the records. This is independent work and is not affiliated with or endorsed by GLEIF or any entity named.</p>
+  <p class="signoff">I build data quality controls for reference and financial data. The same approach, applied to SEC holdings filings, found one asset manager's subsidiary counted twice inside its parent for four quarters: <a href="https://tee-works.github.io/holdings-data-quality/">holdings data quality</a>.</p>
+</article>
+</body>
+</html>

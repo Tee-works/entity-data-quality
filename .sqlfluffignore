@@ -1,0 +1,2 @@
+# E01 uses DuckDB lambda syntax (lambda x: ...), which the sqlfluff parser does not read yet.
+controls/E01_lei_check_digits.sql
